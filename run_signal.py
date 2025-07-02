@@ -123,7 +123,13 @@ future_return = df["Returns"].shift(-1)
 df["Target"] = np.where(future_return > 0.003, 1, 0)
 
 df = df.dropna()
+if df.empty:
+    print("🚫 DataFrame is empty after dropping NA. Exiting.")
+    send_telegram_message("🚫 No signal generated. Data incomplete or not fresh.")
+    exit()
+
 features = df.drop(columns=["Target", "Close", "Returns"])
+
 target = df["Target"]
 
 selector = SelectKBest(score_func=f_classif, k=20)
