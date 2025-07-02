@@ -44,12 +44,15 @@ def send_telegram_message(message):
         print("❌ Telegram send exception:", e)
 
 # Check if current time is within market hours
+# Script will exit outside 9:00 AM to 2:30 PM IST (weekdays only)
 def is_market_time():
     ist = pytz.timezone("Asia/Kolkata")
     now = datetime.now(ist)
     if now.weekday() >= 5:
         return False
-    return (now.hour == 9 or (now.hour == 14 and now.minute <= 30))
+    market_start = now.replace(hour=9, minute=0, second=0, microsecond=0)
+    market_end = now.replace(hour=14, minute=30, second=0, microsecond=0)
+    return market_start <= now <= market_end
 
 if not is_market_time():
     print("🚨 Not market time. Exiting.")
@@ -119,8 +122,9 @@ df["Lag_2"] = df["Returns"].shift(2)
 future_return = df["Returns"].shift(-1)
 df["Target"] = np.where(future_return > 0.003, 1, 0)
 
-features = df.drop(columns=["Target", "Close", "Returns"]).dropna()
-target = df["Target"].loc[features.index]
+df = df.dropna()
+features = df.drop(columns=["Target", "Close", "Returns"])
+target = df["Target"]
 
 selector = SelectKBest(score_func=f_classif, k=20)
 X_selected = selector.fit_transform(features, target)
