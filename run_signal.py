@@ -49,7 +49,7 @@ def is_market_time():
     now = datetime.now(ist)
     if now.weekday() >= 5:
         return False
-    return (now.hour == 9 and now.minute >= 0) or (now.hour == 14 and now.minute >= 30)
+    return (now.hour == 9 or (now.hour == 14 and now.minute <= 30))
 
 if not is_market_time():
     print("🚨 Not market time. Exiting.")
