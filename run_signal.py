@@ -64,7 +64,39 @@ btc_df = load_data("BTC-USD")
 
 # 📌 SECTION 4: Technical + Macro Feature Engineering
 
-# ... (unchanged)
+# 📌 SECTION 5: Target + Modeling Prep
+
+future_return = df["Returns"].shift(-1)
+df["Target"] = np.where(future_return > 0.003, 1, 0)
+
+features = df.drop(columns=["Target", "Close", "Returns"]).dropna()
+target = df["Target"].loc[features.index]
+
+selector = SelectKBest(score_func=f_classif, k=20)
+X_selected = selector.fit_transform(features, target)
+selected_columns = features.columns[selector.get_support()]
+X = features[selected_columns].values
+y = target.values
+
+sm = SMOTE(random_state=42)
+X_res, y_res = sm.fit_resample(X, y)
+
+split = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
+for train_idx, test_idx in split.split(X_res, y_res):
+    X_train, X_test = X_res[train_idx], X_res[test_idx]
+    y_train, y_test = y_res[train_idx], y_res[test_idx]
+
+xgb = XGBClassifier(n_estimators=150, max_depth=4, learning_rate=0.05, subsample=0.8, use_label_encoder=False, eval_metric='logloss')
+lgb = LGBMClassifier(n_estimators=150, max_depth=4, learning_rate=0.05)
+logreg = LogisticRegression()
+
+ensemble = VotingClassifier(
+    estimators=[("xgb", xgb), ("lgb", lgb), ("logreg", logreg)],
+    voting="soft",
+    weights=[3, 2, 1]
+)
+ensemble.fit(X_train, y_train)
+
 
 # 📌 SECTION 6: Single High-Confidence Trade Suggestion
 
