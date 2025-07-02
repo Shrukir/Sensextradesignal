@@ -129,7 +129,6 @@ if df.empty:
     exit()
 
 features = df.drop(columns=["Target", "Close", "Returns"])
-
 target = df["Target"]
 
 selector = SelectKBest(score_func=f_classif, k=20)
