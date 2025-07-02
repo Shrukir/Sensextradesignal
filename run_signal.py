@@ -25,12 +25,13 @@ import requests
 import random
 import time
 from scipy.stats import norm
+import pytz
 
 warnings.filterwarnings("ignore", category=UndefinedMetricWarning)
 
 # 📌 SECTION 2B: Telegram Alert Function
 TELEGRAM_TOKEN = "7364483334:AAEMJeGxlUkFspVTw4oRYTymK_BwM6pS3no"
-TELEGRAM_CHAT_ID = "<1006078163>"
+TELEGRAM_CHAT_ID = "1006078163"
 
 def send_telegram_message(message):
     try:
@@ -41,6 +42,18 @@ def send_telegram_message(message):
             print("❌ Telegram error:", r.text)
     except Exception as e:
         print("❌ Telegram send exception:", e)
+
+# Check if current time is within market hours
+def is_market_time():
+    ist = pytz.timezone("Asia/Kolkata")
+    now = datetime.now(ist)
+    if now.weekday() >= 5:
+        return False
+    return (now.hour == 9 and now.minute >= 0) or (now.hour == 14 and now.minute >= 30)
+
+if not is_market_time():
+    print("🚨 Not market time. Exiting.")
+    exit()
 
 # 📌 SECTION 3: Load Historical Data
 
@@ -63,6 +76,43 @@ shanghai_df = load_data("000001.SS")
 btc_df = load_data("BTC-USD")
 
 # 📌 SECTION 4: Technical + Macro Feature Engineering
+
+def enrich_indicators(df):
+    df["Returns"] = df["Close"].pct_change()
+    df["ATR"] = df["High"].rolling(14).max() - df["Low"].rolling(14).min()
+    df["ATR_mean"] = df["ATR"].rolling(20).mean()
+    df["Volatility_Filter"] = df["ATR"] > df["ATR_mean"]
+    df["RSI"] = RSIIndicator(close=df["Close"], window=14).rsi()
+    df["MACD"] = MACD(close=df["Close"]).macd_diff()
+    df["ADX"] = ADXIndicator(high=df["High"], low=df["Low"], close=df["Close"]).adx()
+    return df
+
+sensex_df = enrich_indicators(sensex_df)
+us_df["Returns"] = us_df["Close"].pct_change()
+crude_df["Returns"] = crude_df["Close"].pct_change()
+vix_df["Change"] = vix_df["Close"].pct_change()
+dxy_df["Change"] = dxy_df["Close"].pct_change()
+bond_df["Change"] = bond_df["Close"].pct_change()
+copper_df["Change"] = copper_df["Close"].pct_change()
+shanghai_df["Change"] = shanghai_df["Close"].pct_change()
+btc_df["Change"] = btc_df["Close"].pct_change()
+
+# Merge + Lag
+
+df = sensex_df[["Close", "Returns", "Volatility_Filter", "RSI", "MACD", "ADX"]].copy()
+df = df.join(us_df[["Returns"]].rename(columns={"Returns": "US_Returns"}))
+df = df.join(crude_df[["Returns"]].rename(columns={"Returns": "Crude_Returns"}))
+df = df.join(vix_df[["Change"]].rename(columns={"Change": "VIX_Change"}))
+df = df.join(dxy_df[["Change"]].rename(columns={"Change": "DXY_Change"}))
+df = df.join(bond_df[["Change"]].rename(columns={"Change": "BOND_Change"}))
+df = df.join(copper_df[["Change"]].rename(columns={"Change": "Copper_Change"}))
+df = df.join(shanghai_df[["Change"]].rename(columns={"Change": "Shanghai_Change"}))
+df = df.join(btc_df[["Change"]].rename(columns={"Change": "BTC_Change"}))
+
+df["Rolling_3d"] = df["Returns"].rolling(3).mean()
+df["Rolling_5d"] = df["Returns"].rolling(5).mean()
+df["Lag_1"] = df["Returns"].shift(1)
+df["Lag_2"] = df["Returns"].shift(2)
 
 # 📌 SECTION 5: Target + Modeling Prep
 
@@ -96,7 +146,6 @@ ensemble = VotingClassifier(
     weights=[3, 2, 1]
 )
 ensemble.fit(X_train, y_train)
-
 
 # 📌 SECTION 6: Single High-Confidence Trade Suggestion
 
